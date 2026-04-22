@@ -242,6 +242,8 @@ const Dashboard = () => {
     alert("Month saved! Your historical data has been updated.");
   };
 
+  const totalActualExpenses = CATEGORIES.reduce((s, k) => s + actual[k], 0);
+  const anyActualEntered = CATEGORIES.some((k) => actual[k] > 0) || actual.income > 0;
   const forecastTotalExpenses = forecastEntry ? CATEGORIES.reduce((s, k) => s + (forecastEntry[k] as number), 0) : 0;
   const spendingRatio = forecastTotalExpenses > 0 ? totalActualExpenses / forecastTotalExpenses : 0;
   const trackingStatus: { label: string; style: string } = !anyActualEntered
@@ -256,8 +258,6 @@ const Dashboard = () => {
   const advice = generateAdvice(plannedForAdvice, actual, forecastEntry?.income ?? 0);
   const forecastLabel = getForecastMonthLabel();
   const selectedLabel = selectedData?.label ?? "";
-  const totalActualExpenses = CATEGORIES.reduce((s, k) => s + actual[k], 0);
-  const anyActualEntered = CATEGORIES.some((k) => actual[k] > 0) || actual.income > 0;
 
   if (!hasData) {
     return (
@@ -344,14 +344,16 @@ const Dashboard = () => {
             {trackerOpen && (
               <div className="px-4 pb-5 space-y-5 border-t border-border animate-fade-in">
 
-                {/* Bank connect nudge */}
-                <div className="flex items-center justify-between pt-3 rounded-lg bg-muted/40 -mx-4 px-4 py-2.5">
-                  <p className="text-xs text-muted-foreground">Skip manual entry — connect your bank to auto-fill.</p>
-                  <Button variant="ghost" size="sm" className="text-xs text-primary gap-1 h-7 px-2 shrink-0" onClick={() => navigate("/bank-connect")}>
-                    <Link2 className="w-3 h-3" />
-                    Connect
-                  </Button>
-                </div>
+                {/* Bank connect nudge — only shown if user hasn't already connected their bank */}
+                {userData.dataMethod !== "bank" && (
+                  <div className="flex items-center justify-between pt-3 rounded-lg bg-muted/40 -mx-4 px-4 py-2.5">
+                    <p className="text-xs text-muted-foreground">Skip manual entry — connect your bank to auto-fill.</p>
+                    <Button variant="ghost" size="sm" className="text-xs text-primary gap-1 h-7 px-2 shrink-0" onClick={() => navigate("/bank-connect")}>
+                      <Link2 className="w-3 h-3" />
+                      Connect
+                    </Button>
+                  </div>
+                )}
 
                 {/* Income slider */}
                 <div className="space-y-1.5">
