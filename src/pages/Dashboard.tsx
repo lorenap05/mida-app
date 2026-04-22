@@ -70,45 +70,93 @@ const generateAdvice = (
 ): { tip: string; category: string; trend: "over" | "under" | "on" }[] => {
   const tips: { tip: string; category: string; trend: "over" | "under" | "on" }[] = [];
 
+  const actualIncome = actual.income > 0 ? actual.income : plannedIncome;
+  const totalActual = CATEGORIES.reduce((s, k) => s + actual[k], 0);
+
+  // Per-category tips — focused on insight and action, not just restating numbers
   CATEGORIES.forEach((cat) => {
     const plan = planned[cat];
     const act = actual[cat];
     if (!act || plan === 0) return;
     const diff = act - plan;
     const pct = Math.abs(diff) / plan;
+    const incomeShare = actualIncome > 0 ? Math.round((act / actualIncome) * 100) : 0;
+
     if (pct > 0.15) {
       if (diff > 0) {
-        let msg = `You're $${diff.toLocaleString("en-US")} over your ${CATEGORY_LABELS[cat].toLowerCase()} plan.`;
-        if (cat === "leisure") msg += " Cutting back on non-essential outings could help.";
-        else if (cat === "groceries") msg += " Meal planning or buying in bulk could reduce this.";
-        else if (cat === "transport") msg += " Combining trips or fewer ride-shares would help.";
-        else if (cat === "others") msg += " Review miscellaneous items for anything you can delay.";
+        const overPct = Math.round(pct * 100);
+        let msg = "";
+        if (cat === "leisure") {
+          msg = `Leisure is eating up ${incomeShare}% of your income this month. Skipping one outing a week could recover around $${Math.round(diff * 0.5).toLocaleString("en-US")} by month end — without feeling like a big sacrifice.`;
+        } else if (cat === "groceries") {
+          msg = `Groceries are running ${overPct}% over plan. Shopping with a list and sticking to weekly meal prep typically cuts grocery bills by 20–30% — that's potentially $${Math.round(act * 0.25).toLocaleString("en-US")} back each month.`;
+        } else if (cat === "transport") {
+          msg = `Transport is ${overPct}% over budget. If ride-shares are a factor, swapping just 3 per week for public transit could recover around $${Math.round(diff * 0.6).toLocaleString("en-US")} this month.`;
+        } else if (cat === "housing") {
+          msg = `Housing is ${overPct}% above plan, which is putting pressure on your other categories. If this is a recurring pattern, it may be worth adjusting your forecast to reflect your real fixed costs.`;
+        } else if (cat === "health") {
+          msg = `Health spending is ${overPct}% over plan. Check whether any of this was one-off (a pharmacy run, an appointment) — if so, your regular spending may still be on track and this won't repeat.`;
+        } else {
+          msg = `${CATEGORY_LABELS[cat]} is ${overPct}% over budget. Pull up this week's transactions and find the single largest item — that's usually where the biggest saving opportunity hides.`;
+        }
         tips.push({ tip: msg, category: CATEGORY_LABELS[cat], trend: "over" });
       } else {
-        tips.push({
-          tip: `Great discipline on ${CATEGORY_LABELS[cat].toLowerCase()}! $${Math.abs(diff).toLocaleString("en-US")} under plan — a buffer you could direct to savings.`,
-          category: CATEGORY_LABELS[cat],
-          trend: "under",
-        });
+        const saved = Math.abs(diff);
+        let msg = "";
+        if (cat === "leisure") {
+          msg = `You've kept leisure $${saved.toLocaleString("en-US")} under budget — good restraint. If it holds, consider moving half of that to savings and half to next month as a guilt-free allowance.`;
+        } else if (cat === "groceries") {
+          msg = `Groceries are $${saved.toLocaleString("en-US")} under plan. If you've been meal planning, this is proof it works — keep the habit going.`;
+        } else {
+          msg = `${CATEGORY_LABELS[cat]} is $${saved.toLocaleString("en-US")} under plan. Consider auto-transferring that amount to savings now — money left sitting in your current account tends to get spent.`;
+        }
+        tips.push({ tip: msg, category: CATEGORY_LABELS[cat], trend: "under" });
       }
     }
   });
 
+  // Net savings rate insight — gives the big picture
+  if (actualIncome > 0 && totalActual > 0) {
+    const netSavings = actualIncome - totalActual;
+    const savingsRate = Math.round((netSavings / actualIncome) * 100);
+    if (netSavings > 0 && savingsRate >= 10) {
+      tips.push({
+        tip: `You're saving roughly ${savingsRate}% of your income this month — above the recommended 10% baseline. If you don't have 3 months of expenses set aside yet, this is a great moment to build that buffer.`,
+        category: "Overall",
+        trend: "under",
+      });
+    } else if (netSavings > 0 && savingsRate < 10) {
+      tips.push({
+        tip: `After expenses, you have $${netSavings.toLocaleString("en-US")} left — a ${savingsRate}% savings rate. Experts recommend 10–20%. A small cut in your biggest overspend category could close that gap without changing much else.`,
+        category: "Overall",
+        trend: "on",
+      });
+    } else if (netSavings < 0) {
+      tips.push({
+        tip: `Spending is $${Math.abs(netSavings).toLocaleString("en-US")} more than income this month. Start with your largest over-budget category — one focused cut there will do more than small trims across the board.`,
+        category: "Overall",
+        trend: "over",
+      });
+    }
+  }
+
+  // Income variance tip
   if (actual.income > 0 && plannedIncome > 0) {
     const d = actual.income - plannedIncome;
     if (Math.abs(d) / plannedIncome > 0.1) {
       tips.push(
         d < 0
-          ? { tip: `Income came in $${Math.abs(d).toLocaleString("en-US")} below forecast. Prioritise fixed costs and hold off on discretionary spending.`, category: "Income", trend: "over" }
-          : { tip: `Income is $${d.toLocaleString("en-US")} above forecast. A good moment to top up your emergency fund.`, category: "Income", trend: "under" }
+          ? { tip: `Income came in ${Math.round((Math.abs(d) / plannedIncome) * 100)}% below forecast. Cover fixed costs first, and pause any discretionary spending until you have a clearer picture of the month.`, category: "Income", trend: "over" }
+          : { tip: `Income came in $${d.toLocaleString("en-US")} above forecast. Before it blends into daily spending, try splitting it: 50% to savings, 50% to clear any over-budget category. That kind of windfall is the fastest way to build a cushion.`, category: "Income", trend: "under" }
       );
     }
   }
 
   if (tips.length === 0) {
-    tips.push({ tip: "You're tracking closely to plan. Keep it up and review again at month end.", category: "Overall", trend: "on" });
+    tips.push({ tip: "You're tracking closely to plan — solid consistency. At month end, note which categories felt tight and which had room. That's the data you need to make next month's forecast even more accurate.", category: "Overall", trend: "on" });
   }
-  return tips;
+
+  return tips.slice(0, 3);
 };
 
 // ─── Actual Slider ────────────────────────────────────────────────────────────
