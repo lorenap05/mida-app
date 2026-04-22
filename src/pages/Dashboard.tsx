@@ -242,6 +242,8 @@ const Dashboard = () => {
     alert("Month saved! Your historical data has been updated.");
   };
 
+  const totalActualExpenses = CATEGORIES.reduce((s, k) => s + actual[k], 0);
+  const anyActualEntered = CATEGORIES.some((k) => actual[k] > 0) || actual.income > 0;
   const forecastTotalExpenses = forecastEntry ? CATEGORIES.reduce((s, k) => s + (forecastEntry[k] as number), 0) : 0;
   const spendingRatio = forecastTotalExpenses > 0 ? totalActualExpenses / forecastTotalExpenses : 0;
   const trackingStatus: { label: string; style: string } = !anyActualEntered
@@ -256,8 +258,6 @@ const Dashboard = () => {
   const advice = generateAdvice(plannedForAdvice, actual, forecastEntry?.income ?? 0);
   const forecastLabel = getForecastMonthLabel();
   const selectedLabel = selectedData?.label ?? "";
-  const totalActualExpenses = CATEGORIES.reduce((s, k) => s + actual[k], 0);
-  const anyActualEntered = CATEGORIES.some((k) => actual[k] > 0) || actual.income > 0;
 
   if (!hasData) {
     return (
