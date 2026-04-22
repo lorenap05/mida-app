@@ -13,6 +13,93 @@ import * as XLSX from "xlsx";
 import { getMonthColumns } from "@/lib/monthUtils";
 import { clearForecastAdjustments } from "@/lib/forecastStore";
 
+// ---------- Gemini helpers ----------
+
+// Builds a personalised system prompt from the user's saved data.
+// Gemini receives this with every message so it always knows who it's talking to.
+const buildSystemPrompt = (): string => {
+  const data = loadUserData();
+  const name = data.name || "the user";
+  const age  = data.age  || "unknown age";
+  const goal = data.goals || "not specified";
+
+  // If the user uploaded 12 months of data, compute a quick financial summary.
+  let financialSummary = "No financial data available yet.";
+  if (data.financialData && data.financialData.length > 0) {
+    const months = data.financialData;
+    const avgIncome = months.reduce((s, m) => s + m.income, 0) / months.length;
+    const avgExpenses = months.reduce((s, m) => {
+      return s + m.rent + m.groceries + m.transport + m.leisure + m.utilities + m.health + m.education + m.others;
+    }, 0) / months.length;
+    const remaining = avgIncome - avgExpenses;
+    financialSummary =
+      `Average monthly income: $${avgIncome.toFixed(0)}. ` +
+      `Average monthly expenses: $${avgExpenses.toFixed(0)}. ` +
+      `Average remaining: $${remaining.toFixed(0)}.`;
+  }
+
+  return `You are Mida, a warm and knowledgeable personal finance guide built into a budgeting app.
+
+User profile:
+- Name: ${name}
+- Age: ${age}
+- Financial goal: ${goal}
+- Financial summary: ${financialSummary}
+
+Your personality:
+- Warm, encouraging, and non-judgmental. You celebrate small wins.
+- Always use the user's first name (${name}) to make responses feel personal.
+- Give concrete, actionable advice — never vague or generic.
+- Never recommend investments or products. Keep guidance practical and everyday.
+
+App navigation you can suggest:
+- Forecast page (/forecast): shows next month's predicted income and expenses.
+- Dashboard page (/dashboard): shows the current month, spending tracker, and tips.
+- Profile page (/profile): lets the user update personal info and settings.
+
+Response rules:
+- Keep replies SHORT — 2 to 4 sentences maximum. Be conversational.
+- If the user's question would be best answered by navigating to a page, end your reply with a JSON block on its own line, exactly like this: {"action": "navigate", "to": "/forecast"}
+- Do not include the JSON block unless you are actually suggesting navigation.
+- Never explain that you are an AI. Just be Mida.`;
+};
+
+// Calls the Gemini 2.0 Flash API and returns the text of the reply.
+// "history" is the conversation so far (so Gemini has context).
+const callGemini = async (
+  userMessage: string,
+  history: Array<{ role: "user" | "model"; parts: [{ text: string }] }>
+): Promise<string> => {
+  const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+
+  // Build the full list of turns: past history + the new user message
+  const contents = [
+    ...history,
+    { role: "user", parts: [{ text: userMessage }] },
+  ];
+
+  const body = {
+    system_instruction: { parts: [{ text: buildSystemPrompt() }] },
+    contents,
+  };
+
+  const response = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Gemini API error: ${response.status}`);
+  }
+
+  const json = await response.json();
+  return json.candidates[0].content.parts[0].text as string;
+};
+
+// -----------------------------------
+
 interface Message {
   role: "assistant" | "user";
   content: string;
@@ -62,6 +149,15 @@ const Chat = () => {
   const [showBankConnection, setShowBankConnection] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // isTyping: true while we wait for Gemini to reply (shows animated dots)
+  const [isTyping, setIsTyping] = useState(false);
+
+  // conversationHistory: the full list of turns sent to Gemini each time,
+  // so it remembers what was said earlier in the session.
+  const [conversationHistory, setConversationHistory] = useState<
+    Array<{ role: "user" | "model"; parts: [{ text: string }] }>
+  >([]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -161,6 +257,58 @@ const Chat = () => {
     setStep("manual-template");
   };
 
+  // Sends a message to Gemini and handles the response.
+  // This is called only during the "returning" (post-onboarding) flow.
+  const handleGeminiMessage = async (userMessage: string) => {
+    // Show the animated typing indicator while we wait
+    setIsTyping(true);
+
+    try {
+      const replyText = await callGemini(userMessage, conversationHistory);
+
+      // Check if Gemini included a navigation instruction (JSON block)
+      // e.g. {"action": "navigate", "to": "/forecast"}
+      const jsonMatch = replyText.match(/\{"action"\s*:\s*"navigate"[^}]*\}/);
+
+      // The visible reply is everything before the JSON block (if there is one)
+      const visibleText = jsonMatch
+        ? replyText.replace(jsonMatch[0], "").trim()
+        : replyText.trim();
+
+      // Update conversation history so the next call has full context
+      setConversationHistory((prev) => [
+        ...prev,
+        { role: "user",  parts: [{ text: userMessage }] },
+        { role: "model", parts: [{ text: replyText }] },
+      ]);
+
+      // If there is a visible reply, show it
+      if (visibleText) {
+        addAssistantMessage(visibleText);
+      }
+
+      // If Gemini told us to navigate, do so after a short pause
+      if (jsonMatch) {
+        try {
+          const action = JSON.parse(jsonMatch[0]);
+          if (action.action === "navigate" && action.to) {
+            setTimeout(() => navigate(action.to), 1200);
+          }
+        } catch {
+          // Ignore malformed JSON — just show the text reply
+        }
+      }
+    } catch {
+      // Show a friendly error if the API call failed
+      addAssistantMessage(
+        "Sorry, I'm having trouble connecting right now. Try again in a moment."
+      );
+    } finally {
+      // Always hide the typing indicator when done
+      setIsTyping(false);
+    }
+  };
+
   const processStep = (answer: string) => {
     const save = (key: string, val: string) =>
       setUserData((prev) => ({ ...prev, [key]: val }));
@@ -168,39 +316,8 @@ const Chat = () => {
     setTimeout(() => {
       switch (step) {
         case "returning": {
-          const lower = answer.toLowerCase();
-          const name = loadUserData().name || "";
-          if (lower.includes("forecast") || lower.includes("next month")) {
-            navigate("/forecast");
-          } else if (lower.includes("track") || lower.includes("spending")) {
-            localStorage.setItem("mida_tracker_open", "true");
-            navigate("/dashboard");
-          } else if (lower.includes("overview") || lower.includes("month") || lower.includes("dashboard")) {
-            navigate("/dashboard");
-          } else if (lower.includes("goal")) {
-            addAssistantMessage(
-              `Your goal is front and center on your dashboard, ${name}. Head there to see how you're tracking! 🎯`,
-              { options: ["View my forecast", "Track my spending", "Current month overview", "Update my info"] }
-            );
-          } else if (lower.includes("update") || lower.includes("info")) {
-            addAssistantMessage(
-              "What would you like to update?",
-              { options: ["Personal info", "Financial data"] }
-            );
-          } else if (lower.includes("personal")) {
-            navigate("/profile");
-          } else if (lower.includes("financial")) {
-            addAssistantMessage(
-              "How would you like to update your financial data?",
-              { options: ["Upload spreadsheet", "Fill in the chat"] }
-            );
-            setStep("manual-choice");
-          } else {
-            addAssistantMessage(
-              `I'm here to help, ${name}! Here's what I can do:`,
-              { options: ["View my forecast", "Track my spending", "Current month overview", "Update my info"] }
-            );
-          }
+          // Send the user's message to Gemini instead of keyword matching
+          handleGeminiMessage(answer);
           break;
         }
         case "name":
@@ -377,6 +494,18 @@ const Chat = () => {
             )}
           </div>
         ))}
+
+        {/* Typing indicator — three animated dots shown while Gemini is thinking */}
+        {isTyping && (
+          <div className="animate-slide-up">
+            <div className="max-w-[85%] rounded-2xl px-4 py-3 text-sm bg-card shadow-card text-foreground rounded-tl-sm inline-flex gap-1 items-center">
+              <span className="w-2 h-2 rounded-full bg-muted-foreground animate-bounce [animation-delay:0ms]" />
+              <span className="w-2 h-2 rounded-full bg-muted-foreground animate-bounce [animation-delay:150ms]" />
+              <span className="w-2 h-2 rounded-full bg-muted-foreground animate-bounce [animation-delay:300ms]" />
+            </div>
+          </div>
+        )}
+
         <div ref={bottomRef} />
       </div>
 
@@ -393,21 +522,26 @@ const Chat = () => {
           <Input
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && handleSend()}
+            onKeyDown={(e) => e.key === "Enter" && !isTyping && handleSend()}
             placeholder={
               step === "returning"
-                ? "Or type your question..."
+                ? isTyping ? "Mida is thinking..." : "Ask Mida anything..."
                 : messages.length > 0 && messages[messages.length - 1].options
                 ? "Select an option above"
                 : "Type your answer..."
             }
-            disabled={step !== "returning" && !!(messages.length > 0 && messages[messages.length - 1].options)}
+            // Returning users can always type freely.
+            // During onboarding, disable the input when option buttons are shown.
+            disabled={
+              isTyping ||
+              (step !== "returning" && !!(messages.length > 0 && messages[messages.length - 1].options))
+            }
             className="flex-1 rounded-full bg-secondary border-0"
           />
           <Button
             size="icon"
             onClick={() => handleSend()}
-            disabled={!input.trim()}
+            disabled={!input.trim() || isTyping}
             className="rounded-full shrink-0"
           >
             <Send className="w-4 h-4" />
