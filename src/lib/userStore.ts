@@ -52,7 +52,7 @@ export const loadUserData = (): UserData => {
 
 export const hasCompletedOnboarding = (): boolean => {
   const data = loadUserData();
-  return !!data.name && !!data.occupation;
+  return !!data.name && !!data.financialData && data.financialData.length > 0;
 };
 
 export const hasFinancialData = (): boolean => {
