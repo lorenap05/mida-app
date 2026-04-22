@@ -297,7 +297,9 @@ const Chat = () => {
         <img src={MidaLogo} alt="Mida" className="h-8 w-auto" />
         <div>
           <p className="text-sm font-semibold text-foreground">Mida Assistant</p>
-          <p className="text-xs text-muted-foreground">Personalizing your forecast</p>
+          <p className="text-xs text-muted-foreground">
+            {step === "returning" ? "Your financial guide" : "Personalizing your forecast"}
+          </p>
         </div>
       </div>
 
