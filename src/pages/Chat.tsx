@@ -74,7 +74,7 @@ const callGemini = async (
   if (!apiKey) {
     throw new Error("VITE_GEMINI_API_KEY is not configured");
   }
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
 
   // Build the full list of turns: past history + the new user message
   const contents = [
@@ -94,7 +94,7 @@ const callGemini = async (
   });
 
   if (!response.ok) {
-    throw new Error(`Gemini API error: ${response.status}`);
+    const errBody = await response.text().catch(() => "(no body)"); throw new Error(`Gemini API error: ${response.status} — ${errBody}`);
   }
 
   const json = await response.json();
