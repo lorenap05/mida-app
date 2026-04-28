@@ -64,7 +64,7 @@ Response rules:
 - Never explain that you are an AI. Just be Mida.`;
 };
 
-// Calls the Gemini 2.0 Flash API and returns the text of the reply.
+// Calls the Gemini 2.5 Flash API and returns the text of the reply.
 // "history" is the conversation so far (so Gemini has context).
 const callGemini = async (
   userMessage: string,
@@ -74,7 +74,7 @@ const callGemini = async (
   if (!apiKey) {
     throw new Error("VITE_GEMINI_API_KEY is not configured");
   }
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
 
   // Build the full list of turns: past history + the new user message
   const contents = [
