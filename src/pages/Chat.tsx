@@ -167,7 +167,7 @@ const Chat = () => {
     if (step === "greeting") {
       const existing = loadUserData();
       setTimeout(() => {
-        if (hasCompletedOnboarding()) {
+        if (existing.name) {
           addAssistantMessage(
             `Welcome back, ${existing.name}! 👋 What would you like to do today?`,
             { options: ["View my forecast", "Track my spending", "Current month overview", "Update my info"] }
@@ -322,6 +322,7 @@ const Chat = () => {
         }
         case "name":
           save("name", answer);
+          saveUserData({ name: answer });
           addAssistantMessage(`Nice to meet you, ${answer}! How old are you?`);
           setStep("age");
           break;
