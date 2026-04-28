@@ -20,7 +20,7 @@ const App = () => (
     <TooltipProvider>
       <Toaster />
       <Sonner />
-      <BrowserRouter>
+      <BrowserRouter basename="/mida-app">
         <Routes>
           <Route path="/" element={<Landing />} />
           <Route path="/chat" element={<Chat />} />

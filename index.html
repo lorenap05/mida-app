@@ -21,6 +21,19 @@
   <meta name="twitter:title" content="Mida">
   <meta property="og:description" content="Lovable Generated Project">
   <meta name="twitter:description" content="Lovable Generated Project">
+    <script>
+      // Companion to public/404.html — restores the real URL after the
+      // GitHub Pages redirect encodes the path into ?p=...
+      (function () {
+        var p = new URLSearchParams(window.location.search).get('p');
+        if (p) {
+          window.history.replaceState(
+            null, null,
+            '/mida-app' + decodeURIComponent(p)
+          );
+        }
+      })();
+    </script>
 </head>
 
   <body>
