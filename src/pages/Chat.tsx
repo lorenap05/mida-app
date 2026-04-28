@@ -301,10 +301,10 @@ const Chat = () => {
           // Ignore malformed JSON — just show the text reply
         }
       }
-    } catch {
-      // Show a friendly error if the API call failed
+    } catch (err) {
+      const detail = err instanceof Error ? err.message : String(err);
       addAssistantMessage(
-        "Sorry, I'm having trouble connecting right now. Try again in a moment."
+        `Sorry, I'm having trouble connecting right now. Try again in a moment.\n\n(Error: ${detail})`
       );
     } finally {
       // Always hide the typing indicator when done
