@@ -71,6 +71,9 @@ const callGemini = async (
   history: Array<{ role: "user" | "model"; parts: [{ text: string }] }>
 ): Promise<string> => {
   const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+  if (!apiKey) {
+    throw new Error("VITE_GEMINI_API_KEY is not configured");
+  }
   const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
 
   // Build the full list of turns: past history + the new user message
